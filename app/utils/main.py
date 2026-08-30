@@ -34,7 +34,7 @@ except Exception as error:
 # =========================================================
 
 app = FastAPI(
-    title="API Control de Gastos y Veterinaria",
+    title="API Control de Gastos (SYNCPAGO)",
     description="API para gestión de usuarios y gastos",
     version="1.0.0"
 )
