@@ -64,17 +64,7 @@ app.add_middleware(
 
 API_PREFIX = "/api/v1"
 
-# Registrar el router de usuarios
-app.include_router(
-    usuario_router,
-    prefix=API_PREFIX
-)
 
-# Registrar el router de gastos
-app.include_router(
-    gasto_router,
-    prefix=API_PREFIX
-)
 
 # Registrar los de antes
 app.include_router(
