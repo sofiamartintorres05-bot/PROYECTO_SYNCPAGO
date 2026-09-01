@@ -12,6 +12,7 @@ from app.routes.usuario_routes import router as usuario_router
 from app.routes.recordatorio_routes import router as recordatorio_router
 from app.routes.finanzas_routes import router as finanzas_router
 from app.routes.trazabilidad_routes import router as trazabilidad_router
+from app.routes.tipo_gasto_routes import router as tipo_gasto_router
 
 
 # =========================================================
@@ -89,6 +90,12 @@ app.include_router(
 app.include_router( 
     trazabilidad_router, 
     prefix=API_PREFIX 
+)
+
+# Router de categorías (tipo_gasto)
+app.include_router(
+    tipo_gasto_router,
+    prefix=API_PREFIX
 )
 
 
