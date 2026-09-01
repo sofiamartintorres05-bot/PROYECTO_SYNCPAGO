@@ -36,7 +36,7 @@ def registrar_o_actualizar_finanzas(
         SELECT id_finanza
         FROM finanzas
         WHERE id_usuario = :id_usuario
-          AND DATE_TRUNC('month', fecha) = DATE_TRUNC('month', :fecha::date)
+          AND DATE_TRUNC('month', fecha) = DATE_TRUNC('month', CAST(:fecha AS DATE))
         LIMIT 1;
     """)
     existente = db.execute(sql_buscar, {
