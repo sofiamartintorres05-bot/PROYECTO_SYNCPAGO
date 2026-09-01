@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { gastosService } from "../services/gastosService";
@@ -15,6 +16,7 @@ const PAGE_SIZE = 8;
 export default function Gastos() {
   const { usuario } = useAuth();
   const { mostrarToast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [categorias, setCategorias] = useState<TipoGasto[]>([]);
@@ -30,6 +32,16 @@ export default function Gastos() {
     if (!usuario) return;
     cargarTodo();
   }, [usuario]);
+
+  // Soporta abrir el modal desde fuera de esta página (botón "Agregar
+  // Gasto" de la sidebar) navegando a /gastos?nuevo=1
+  useEffect(() => {
+    if (searchParams.get("nuevo") === "1") {
+      abrirNuevo();
+      setSearchParams({}, { replace: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
 
   async function cargarTodo() {
     if (!usuario) return;
@@ -49,6 +61,7 @@ export default function Gastos() {
   }
 
   // Los gastos cancelados no se muestran en la lista activa (quedan en Historial)
+  // y tampoco cuentan en estadísticas ni en el presupuesto disponible.
   const activos = gastos.filter((g) => g.estado !== "cancelado");
 
   const filtrados = activos.filter((g) => {
@@ -157,9 +170,6 @@ export default function Gastos() {
             }}
           />
         </div>
-        <button className="nav-btn-add" style={{ margin: 0 }} onClick={abrirNuevo}>
-          + Nuevo gasto
-        </button>
       </div>
 
       <table className="data-table">

@@ -71,6 +71,13 @@ export default function Estadisticas() {
   const mesActualPresupuesto = presupuestos[0];
   const mesAnteriorPresupuesto = presupuestos[1];
 
+  // Punto 3: cuando lo que se destina a gastos supera el dinero disponible
+  // de ese mes, se muestra como "deuda" en rojo en vez de "disponible".
+  const balanceDineroVsPresupuesto = mesActualPresupuesto
+    ? mesActualPresupuesto.entrada_dinero - mesActualPresupuesto.presupuesto_gastos
+    : null;
+  const enDeuda = balanceDineroVsPresupuesto !== null && balanceDineroVsPresupuesto < 0;
+
   function cambiarMes(direccion: number) {
     const nueva = new Date(fechaActual);
     nueva.setMonth(nueva.getMonth() + direccion);
@@ -80,6 +87,7 @@ export default function Estadisticas() {
   const mes = fechaActual.getMonth();
   const anio = fechaActual.getFullYear();
 
+  // Los gastos cancelados no cuentan ni en estadísticas ni en el presupuesto.
   const gastosDelMes = gastos.filter((g) => {
     const f = new Date(g.fecha_vencimiento);
     return f.getMonth() === mes && f.getFullYear() === anio && g.estado !== "cancelado";
@@ -155,8 +163,14 @@ export default function Estadisticas() {
           </form>
           {mesActualPresupuesto && (
             <p className="presupuesto-hint">
-              Presupuesto actual: {formatMoney(mesActualPresupuesto.presupuesto_gastos)} —
-              disponible: {formatMoney(mesActualPresupuesto.presupuesto_disponible)}
+              Presupuesto actual: {formatMoney(mesActualPresupuesto.presupuesto_gastos)} —{" "}
+              {enDeuda ? (
+                <span style={{ color: "var(--red)", fontWeight: 700 }}>
+                  deuda: {formatMoney(Math.abs(balanceDineroVsPresupuesto ?? 0))}
+                </span>
+              ) : (
+                <>disponible: {formatMoney(balanceDineroVsPresupuesto ?? 0)}</>
+              )}
             </p>
           )}
         </article>

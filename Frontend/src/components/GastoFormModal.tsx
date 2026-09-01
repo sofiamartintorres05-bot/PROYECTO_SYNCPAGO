@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Modal from "./Modal";
 import type { ClaseTipoGasto, TipoGasto } from "../interfaces/tipoGasto";
 import type { Gasto } from "../interfaces/gasto";
@@ -18,7 +18,13 @@ interface GastoFormModalProps {
   idTipoResuelto?: number | null;
 }
 
-const CLASES: ClaseTipoGasto[] = ["vital", "entretenimiento", "varios"];
+const CLASES: { valor: ClaseTipoGasto; etiqueta: string }[] = [
+  { valor: "vital", etiqueta: "Vital" },
+  { valor: "entretenimiento", etiqueta: "Entretenimiento" },
+  { valor: "varios", etiqueta: "Varios" },
+];
+
+const OPCION_NUEVO = "__nuevo__";
 
 export default function GastoFormModal({
   open,
@@ -34,10 +40,9 @@ export default function GastoFormModal({
 
   const esEdicion = Boolean(gastoEditar);
 
+  const [clase, setClase] = useState<ClaseTipoGasto | "">("");
   const [idTipo, setIdTipo] = useState<string>("");
-  const [nuevaCategoria, setNuevaCategoria] = useState(false);
   const [detalleNuevo, setDetalleNuevo] = useState("");
-  const [claseNueva, setClaseNueva] = useState<ClaseTipoGasto | "">("");
   const [fecha, setFecha] = useState("");
   const [precio, setPrecio] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -46,20 +51,29 @@ export default function GastoFormModal({
   useEffect(() => {
     if (!open) return;
 
-    if (gastoEditar) {
-      setIdTipo(idTipoResuelto ? String(idTipoResuelto) : "");
+    if (gastoEditar && idTipoResuelto) {
+      const categoriaActual = categorias.find((c) => c.id_tipo === idTipoResuelto);
+      setClase(categoriaActual?.clase ?? "");
+      setIdTipo(String(idTipoResuelto));
       setFecha(toDatetimeLocalValue(gastoEditar.fecha_vencimiento));
       setPrecio(String(gastoEditar.precio));
     } else {
+      setClase("");
       setIdTipo("");
       setFecha("");
       setPrecio("");
     }
-    setNuevaCategoria(false);
     setDetalleNuevo("");
-    setClaseNueva("");
     setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, gastoEditar, idTipoResuelto]);
+
+  const detallesFiltrados = useMemo(() => {
+    if (!clase) return categorias;
+    return categorias.filter((c) => c.clase === clase);
+  }, [categorias, clase]);
+
+  const creandoNuevoDetalle = idTipo === OPCION_NUEVO;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,31 +88,31 @@ export default function GastoFormModal({
       setError("Ingresa un precio válido mayor a 0.");
       return;
     }
-    if (!nuevaCategoria && !idTipo) {
-      setError("Selecciona una categoría.");
+    if (!idTipo) {
+      setError("Selecciona el detalle del gasto.");
       return;
     }
-    if (nuevaCategoria && !detalleNuevo.trim()) {
-      setError("Escribe el nombre de la nueva categoría.");
+    if (creandoNuevoDetalle && !detalleNuevo.trim()) {
+      setError("Escribe el nombre del nuevo detalle.");
       return;
     }
 
     setGuardando(true);
     try {
-      let idTipoFinal = idTipo ? Number(idTipo) : null;
+      let idTipoFinal = creandoNuevoDetalle ? null : Number(idTipo);
 
-      if (nuevaCategoria) {
+      if (creandoNuevoDetalle) {
         const categoria = await tipoGastoService.crear(
           usuario.id_usuario,
           detalleNuevo.trim(),
-          claseNueva || undefined
+          clase || undefined
         );
         idTipoFinal = categoria.id_tipo;
         onCategoriaCreada(categoria);
       }
 
       if (!idTipoFinal) {
-        setError("No se pudo determinar la categoría del gasto.");
+        setError("No se pudo determinar el detalle del gasto.");
         setGuardando(false);
         return;
       }
@@ -134,7 +148,7 @@ export default function GastoFormModal({
   return (
     <Modal
       open={open}
-      title={esEdicion ? "Editar gasto" : "Nuevo gasto"}
+      title={esEdicion ? "Editar recibo" : "Nuevo recibo"}
       onClose={onClose}
       footer={
         <>
@@ -147,7 +161,7 @@ export default function GastoFormModal({
             form="gasto-form"
             disabled={guardando}
           >
-            {guardando ? "Guardando..." : "Guardar"}
+            {guardando ? "Guardando..." : esEdicion ? "Guardar cambios" : "Confirmar"}
           </button>
         </>
       }
@@ -155,47 +169,22 @@ export default function GastoFormModal({
       <form id="gasto-form" onSubmit={handleSubmit}>
         <div className="form-field">
           <label>Categoría</label>
-          {!nuevaCategoria ? (
-            <div className="select-wrap">
-              <select value={idTipo} onChange={(e) => setIdTipo(e.target.value)}>
-                <option value="">Selecciona una categoría...</option>
-                {categorias.map((cat) => (
-                  <option key={cat.id_tipo} value={cat.id_tipo}>
-                    {cat.detalle}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <div className="form-row">
-              <input
-                type="text"
-                placeholder="Nombre de la categoría"
-                value={detalleNuevo}
-                onChange={(e) => setDetalleNuevo(e.target.value)}
-              />
-              <div className="select-wrap">
-                <select
-                  value={claseNueva}
-                  onChange={(e) => setClaseNueva(e.target.value as ClaseTipoGasto)}
-                >
-                  <option value="">Clase (opcional)</option>
-                  {CLASES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          )}
-          <span
-            className="forgot-link"
-            style={{ display: "inline-block", marginTop: 8, color: "var(--blue-mid)" }}
-            onClick={() => setNuevaCategoria((v) => !v)}
-          >
-            {nuevaCategoria ? "← Usar categoría existente" : "+ Crear nueva categoría"}
-          </span>
+          <div className="select-wrap">
+            <select
+              value={clase}
+              onChange={(e) => {
+                setClase(e.target.value as ClaseTipoGasto);
+                setIdTipo("");
+              }}
+            >
+              <option value="">Selecciona categoría...</option>
+              {CLASES.map((c) => (
+                <option key={c.valor} value={c.valor}>
+                  {c.etiqueta}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="form-field">
@@ -213,10 +202,34 @@ export default function GastoFormModal({
             type="number"
             min="0"
             step="0.01"
-            placeholder="0"
+            placeholder="Valor"
             value={precio}
             onChange={(e) => setPrecio(e.target.value)}
           />
+        </div>
+
+        <div className="form-field">
+          <label>Detalle del gasto</label>
+          <div className="select-wrap">
+            <select value={idTipo} onChange={(e) => setIdTipo(e.target.value)}>
+              <option value="">Detalle</option>
+              {detallesFiltrados.map((c) => (
+                <option key={c.id_tipo} value={c.id_tipo}>
+                  {c.detalle}
+                </option>
+              ))}
+              <option value={OPCION_NUEVO}>+ Crear nuevo detalle...</option>
+            </select>
+          </div>
+          {creandoNuevoDetalle && (
+            <input
+              type="text"
+              style={{ marginTop: 8 }}
+              placeholder="Nombre del nuevo detalle"
+              value={detalleNuevo}
+              onChange={(e) => setDetalleNuevo(e.target.value)}
+            />
+          )}
         </div>
 
         {error && (

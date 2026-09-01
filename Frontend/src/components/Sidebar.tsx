@@ -12,6 +12,11 @@ export default function Sidebar({ open, onNavigate }: SidebarProps) {
   const linkClass = ({ isActive }: { isActive: boolean }) =>
     `nav-item${isActive ? " active" : ""}`;
 
+  function handleAgregarGasto() {
+    navigate("/gastos?nuevo=1");
+    onNavigate();
+  }
+
   return (
     <nav className={`sidebar${open ? " open" : ""}`} id="sidebar" aria-label="Menú principal">
       <div className="sidebar-logo" role="img" aria-label="SyncPago">
@@ -34,7 +39,7 @@ export default function Sidebar({ open, onNavigate }: SidebarProps) {
           🕓 Historial
         </NavLink>
       </div>
-      <button className="nav-btn-add" onClick={() => { navigate("/gastos"); onNavigate(); }}>
+      <button className="nav-btn-add" onClick={handleAgregarGasto}>
         + Agregar Gasto
       </button>
     </nav>

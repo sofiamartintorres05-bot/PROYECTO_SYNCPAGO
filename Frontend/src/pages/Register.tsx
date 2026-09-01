@@ -30,7 +30,7 @@ export default function Register() {
     setCargando(true);
     try {
       await registrar(nombre, correo, contrasena, telefono || undefined);
-      navigate("/dashboard");
+      navigate("/Login");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Error al registrarte.");
     } finally {

@@ -13,8 +13,8 @@ export default function Modal({ open, title, onClose, children, footer }: ModalP
     <div className={`modal-overlay${open ? " open" : ""}`} onClick={onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
-          <span className="modal-back" onClick={onClose} role="button" aria-label="Cerrar">
-            ✕
+          <span className="modal-back" onClick={onClose} role="button" aria-label="Volver">
+            ←
           </span>
           <h2>{title}</h2>
           <span style={{ width: "1.1rem" }} />
