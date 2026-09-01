@@ -16,10 +16,6 @@ def obtener_alertas_recordatorios(db: Session):
     resultado = db.execute(sql)
     return [dict(row._mapping) for row in resultado]
 
-
-# =========================================================
-# OBTENER EL RECORDATORIO (MINUTOS DE ANTELACIÓN) DE UN GASTO
-# =========================================================
 def obtener_recordatorio_por_gasto(db: Session, id_gasto: int):
     sql = text("""
         SELECT id_recordatorio, id_gasto, tiempo_antelacion
@@ -34,10 +30,6 @@ def obtener_recordatorio_por_gasto(db: Session, id_gasto: int):
         return dict(fila._mapping)
     return None
 
-
-# =========================================================
-# ACTUALIZAR LOS MINUTOS DE ANTELACIÓN DE UN GASTO
-# =========================================================
 def actualizar_tiempo_antelacion(db: Session, id_gasto: int, tiempo_antelacion: int):
     sql = text("""
         UPDATE recordatorio
@@ -60,3 +52,28 @@ def actualizar_tiempo_antelacion(db: Session, id_gasto: int, tiempo_antelacion: 
     if fila:
         return dict(fila._mapping)
     return None
+
+# =========================================================
+# TODOS LOS RECORDATORIOS DE UN USUARIO EN UNA SOLA CONSULTA
+# =========================================================
+# Evita el N+1 (una petición por gasto) que hacía el frontend antes:
+# ahora trae de una vez el tiempo_antelacion de cada gasto del usuario.
+def obtener_recordatorios_usuario(db: Session, id_usuario: int):
+    sql = text("""
+        SELECT r.id_recordatorio, r.id_gasto, r.tiempo_antelacion
+        FROM recordatorio r
+        INNER JOIN gasto g ON r.id_gasto = g.id_gasto
+        INNER JOIN tipo_gasto tg ON g.id_tipo = tg.id_tipo
+        WHERE tg.id_usuario = :id_usuario
+        ORDER BY r.id_gasto ASC, r.id_recordatorio DESC;
+    """)
+    resultado = db.execute(sql, {"id_usuario": id_usuario})
+    filas = [dict(row._mapping) for row in resultado]
+
+    # Si algún gasto llegara a tener más de un recordatorio, nos quedamos
+    # con el más reciente por id_gasto (el ORDER BY ya deja ese primero).
+    por_gasto = {}
+    for fila in filas:
+        if fila["id_gasto"] not in por_gasto:
+            por_gasto[fila["id_gasto"]] = fila
+    return list(por_gasto.values())

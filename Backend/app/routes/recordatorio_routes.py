@@ -4,7 +4,8 @@ from app.config.database import get_db
 from app.controllers.recordatorio_controller import (
     obtener_alertas_recordatorios,
     obtener_recordatorio_por_gasto,
-    actualizar_tiempo_antelacion
+    actualizar_tiempo_antelacion,
+    obtener_recordatorios_usuario
 )
 from app.utils.response import response_success, response_error
 
@@ -30,8 +31,24 @@ def listar_alertas(db: Session = Depends(get_db)):
         )
 
 # =========================================================
-# OBTENER EL RECORDATORIO (MINUTOS DE ANTELACIÓN) DE UN GASTO
+# TODOS LOS RECORDATORIOS DE UN USUARIO (una sola petición)
 # =========================================================
+@router.get("/usuario/{id_usuario}")
+def listar_recordatorios_usuario(id_usuario: int, db: Session = Depends(get_db)):
+    try:
+        recordatorios = obtener_recordatorios_usuario(db, id_usuario)
+        return response_success(
+            mensaje="Recordatorios del usuario obtenidos con éxito",
+            data=recordatorios,
+            code=200
+        )
+    except Exception as error:
+        return response_error(
+            mensaje="Error al consultar los recordatorios del usuario",
+            error=str(error),
+            code=500
+        )
+
 @router.get("/gasto/{id_gasto}")
 def consultar_recordatorio_gasto(id_gasto: int, db: Session = Depends(get_db)):
     try:
@@ -54,9 +71,6 @@ def consultar_recordatorio_gasto(id_gasto: int, db: Session = Depends(get_db)):
             code=500
         )
 
-# =========================================================
-# ACTUALIZAR LOS MINUTOS DE ANTELACIÓN DE UN GASTO
-# =========================================================
 @router.patch("/gasto/{id_gasto}")
 def editar_tiempo_antelacion(
     id_gasto: int,
