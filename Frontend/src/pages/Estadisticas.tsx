@@ -7,6 +7,12 @@ import type { Gasto } from "../interfaces/gasto";
 import type { PresupuestoMes } from "../interfaces/finanzas";
 import { formatMoney, colorParaCategoria, MESES } from "../utils/format";
 
+function fechaAMesInput(fecha: Date): string {
+  const anio = fecha.getFullYear();
+  const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+  return `${anio}-${mes}`;
+}
+
 export default function Estadisticas() {
   const { usuario } = useAuth();
   const { mostrarToast } = useToast();
@@ -15,6 +21,10 @@ export default function Estadisticas() {
   const [presupuestos, setPresupuestos] = useState<PresupuestoMes[]>([]);
   const [cargando, setCargando] = useState(true);
 
+  // Mes al que se le va a guardar el presupuesto (por defecto, el mes actual).
+  // El backend ya soportaba una fecha específica; antes el frontend nunca la
+  // enviaba, así que solo se podía guardar el presupuesto del mes en curso.
+  const [mesFormulario, setMesFormulario] = useState(fechaAMesInput(new Date()));
   const [entradaDinero, setEntradaDinero] = useState("");
   const [presupuestoGastos, setPresupuestoGastos] = useState("");
   const [guardando, setGuardando] = useState(false);
@@ -43,6 +53,20 @@ export default function Estadisticas() {
     }
   }
 
+  // Si ya existe un presupuesto guardado para el mes elegido en el
+  // formulario, se precargan sus valores para poder editarlo en vez de
+  // dejar los campos vacíos.
+  useEffect(() => {
+    const existente = presupuestos.find((p) => p.mes.slice(0, 7) === mesFormulario);
+    if (existente) {
+      setEntradaDinero(String(existente.entrada_dinero));
+      setPresupuestoGastos(String(existente.presupuesto_gastos));
+    } else {
+      setEntradaDinero("");
+      setPresupuestoGastos("");
+    }
+  }, [mesFormulario, presupuestos]);
+
   async function guardarPresupuesto(e: React.FormEvent) {
     e.preventDefault();
     if (!usuario) return;
@@ -57,7 +81,8 @@ export default function Estadisticas() {
 
     setGuardando(true);
     try {
-      await finanzasService.guardar(usuario.id_usuario, entrada, presupuesto);
+      const fecha = `${mesFormulario}-01`;
+      await finanzasService.guardar(usuario.id_usuario, entrada, presupuesto, fecha);
       mostrarToast("Presupuesto guardado ✓");
       cargarTodo();
     } catch (err) {
@@ -71,8 +96,6 @@ export default function Estadisticas() {
   const mesActualPresupuesto = presupuestos[0];
   const mesAnteriorPresupuesto = presupuestos[1];
 
-  // Punto 3: cuando lo que se destina a gastos supera el dinero disponible
-  // de ese mes, se muestra como "deuda" en rojo en vez de "disponible".
   const balanceDineroVsPresupuesto = mesActualPresupuesto
     ? mesActualPresupuesto.entrada_dinero - mesActualPresupuesto.presupuesto_gastos
     : null;
@@ -87,7 +110,6 @@ export default function Estadisticas() {
   const mes = fechaActual.getMonth();
   const anio = fechaActual.getFullYear();
 
-  // Los gastos cancelados no cuentan ni en estadísticas ni en el presupuesto.
   const gastosDelMes = gastos.filter((g) => {
     const f = new Date(g.fecha_vencimiento);
     return f.getMonth() === mes && f.getFullYear() === anio && g.estado !== "cancelado";
@@ -102,15 +124,44 @@ export default function Estadisticas() {
     .reduce((a, g) => a + g.precio, 0);
   const pendienteMes = Math.max(0, totalMes - pagadoMes - vencidoMes);
 
+  const presupuestoVigente = mesActualPresupuesto?.presupuesto_gastos ?? null;
+  const saldoSobranteODeuda =
+    presupuestoVigente !== null ? presupuestoVigente - pagadoMes : null;
+  const hayDeudaPorPagos = saldoSobranteODeuda !== null && saldoSobranteODeuda < 0;
+
+  const totalPrevistoAPagar = pendienteMes + pagadoMes;
+
   const categorias: Record<string, number> = {};
   gastosDelMes.forEach((g) => {
     categorias[g.categoria] = (categorias[g.categoria] || 0) + g.precio;
   });
   const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
 
-  const ahorroMesAnterior = mesAnteriorPresupuesto
-    ? mesAnteriorPresupuesto.presupuesto_gastos - mesAnteriorPresupuesto.total_gastado
-    : null;
+  // ============ RESUMEN DEL MES ANTERIOR ============
+  let nombreMesAnterior = "";
+  let pagadoMesAnterior = 0;
+  let ahorroMesAnterior: number | null = null;
+
+  if (mesAnteriorPresupuesto) {
+    const [anioAnteriorStr, mesAnteriorStr] = mesAnteriorPresupuesto.mes.slice(0, 7).split("-");
+    const anioAnterior = Number(anioAnteriorStr);
+    const mesAnteriorIndex = Number(mesAnteriorStr) - 1;
+
+    nombreMesAnterior = `${MESES[mesAnteriorIndex]} ${anioAnterior}`;
+
+    pagadoMesAnterior = gastos
+      .filter((g) => {
+        const f = new Date(g.fecha_vencimiento);
+        return (
+          f.getMonth() === mesAnteriorIndex &&
+          f.getFullYear() === anioAnterior &&
+          g.estado === "pagado"
+        );
+      })
+      .reduce((a, g) => a + g.precio, 0);
+
+    ahorroMesAnterior = mesAnteriorPresupuesto.presupuesto_gastos - pagadoMesAnterior;
+  }
 
   return (
     <>
@@ -125,12 +176,20 @@ export default function Estadisticas() {
             <span className="finanzas-icon">💰</span>
             <div>
               <h3>Presupuesto mensual</h3>
-              <p>Ingresa el dinero disponible y cuánto destinas a gastos este mes.</p>
+              <p>Elige el mes y guarda cuánto dinero tuviste y cuánto destinaste a gastos.</p>
             </div>
           </div>
           <form onSubmit={guardarPresupuesto}>
             <div className="form-field">
-              <label>Dinero disponible este mes</label>
+              <label>Mes</label>
+              <input
+                type="month"
+                value={mesFormulario}
+                onChange={(e) => setMesFormulario(e.target.value)}
+              />
+            </div>
+            <div className="form-field">
+              <label>Dinero disponible ese mes</label>
               <div className="presupuesto-input-wrap">
                 <span className="presupuesto-prefix">$</span>
                 <input
@@ -179,14 +238,17 @@ export default function Estadisticas() {
           <div className="finanzas-card-header">
             <span className="finanzas-icon">📈</span>
             <div>
-              <h3>Resumen del mes anterior</h3>
-              <p>Comparativa de gastos vs presupuesto.</p>
+              <h3>{mesAnteriorPresupuesto ? `Resumen de ${nombreMesAnterior}` : "Resumen del mes anterior"}</h3>
+              <p>Comparativa entre lo presupuestado y lo que pagaste ese mes.</p>
             </div>
           </div>
 
           {!mesAnteriorPresupuesto ? (
             <p style={{ color: "var(--gray-400)", fontSize: "0.85rem" }}>
-              Aún no hay un presupuesto registrado para el mes anterior.
+              Todavía no has guardado un presupuesto para ningún mes anterior — crear un
+              gasto con fecha pasada no cuenta como presupuesto. Usa el selector de "Mes"
+              de la tarjeta de la izquierda para elegir ese mes y guardar su presupuesto;
+              en cuanto lo hagas, aquí aparecerá la comparativa.
             </p>
           ) : (
             <>
@@ -198,18 +260,20 @@ export default function Estadisticas() {
                   </span>
                 </div>
                 <div className="ahorro-item">
-                  <span className="ahorro-label">Total gastado</span>
-                  <span className="ahorro-value red">
-                    {formatMoney(mesAnteriorPresupuesto.total_gastado)}
-                  </span>
+                  <span className="ahorro-label">Pagado</span>
+                  <span className="ahorro-value red">{formatMoney(pagadoMesAnterior)}</span>
                 </div>
                 <div className="ahorro-item ahorro-item-destacado">
                   <span className="ahorro-label">
                     {ahorroMesAnterior !== null && ahorroMesAnterior >= 0
                       ? "Ahorraste"
-                      : "Te excediste en"}
+                      : "Te excediste"}
                   </span>
-                  <span className={`ahorro-value ${ahorroMesAnterior !== null && ahorroMesAnterior >= 0 ? "green" : "red"}`}>
+                  <span
+                    className={`ahorro-value ${
+                      ahorroMesAnterior !== null && ahorroMesAnterior >= 0 ? "green" : "red"
+                    }`}
+                  >
                     {formatMoney(Math.abs(ahorroMesAnterior ?? 0))}
                   </span>
                 </div>
@@ -220,8 +284,8 @@ export default function Estadisticas() {
                 }`}
               >
                 {ahorroMesAnterior !== null && ahorroMesAnterior >= 0
-                  ? `🎉 ¡Buen trabajo! Te sobraron ${formatMoney(ahorroMesAnterior)} de tu presupuesto.`
-                  : `😟 Gastaste ${formatMoney(Math.abs(ahorroMesAnterior ?? 0))} más de lo planeado.`}
+                  ? `🎉 ¡Buen trabajo! En ${nombreMesAnterior} ahorraste ${formatMoney(ahorroMesAnterior)}.`
+                  : `😟 En ${nombreMesAnterior} te excediste por ${formatMoney(Math.abs(ahorroMesAnterior ?? 0))}.`}
               </div>
             </>
           )}
@@ -253,6 +317,20 @@ export default function Estadisticas() {
         <div className="total-row">
           <span className="label">⚠️ Vencido</span>
           <span className="value red">{formatMoney(vencidoMes)}</span>
+        </div>
+        <div className="total-row">
+          <span className="label">
+            {hayDeudaPorPagos ? "🔴 Deuda" : "💚 Saldo sobrante"} (presupuesto − pagado)
+          </span>
+          <span className={`value ${hayDeudaPorPagos ? "red" : "green"}`}>
+            {presupuestoVigente === null
+              ? "Sin presupuesto"
+              : formatMoney(Math.abs(saldoSobranteODeuda ?? 0))}
+          </span>
+        </div>
+        <div className="total-row">
+          <span className="label">📌 Total previsto a pagar (pendiente + pagado)</span>
+          <span className="value">{formatMoney(totalPrevistoAPagar)}</span>
         </div>
       </section>
 

@@ -4,9 +4,16 @@ import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { gastosService } from "../services/gastosService";
 import { tipoGastoService } from "../services/tipoGastoService";
+import { recordatoriosService } from "../services/recordatoriosService";
 import type { Gasto } from "../interfaces/gasto";
 import type { TipoGasto } from "../interfaces/tipoGasto";
-import { formatMoney, colorParaCategoria } from "../utils/format";
+import {
+  formatMoney,
+  formatDateTime,
+  calcularFechaNotificacion,
+  minutosAHoras,
+  colorParaCategoria,
+} from "../utils/format";
 import EstadoBadge from "../components/EstadoBadge";
 import GastoFormModal from "../components/GastoFormModal";
 import Pagination from "../components/Pagination";
@@ -20,6 +27,8 @@ export default function Gastos() {
 
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [categorias, setCategorias] = useState<TipoGasto[]>([]);
+  // id_gasto -> minutos de antelación de su recordatorio (tabla 'recordatorio')
+  const [recordatorios, setRecordatorios] = useState<Record<number, number>>({});
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<string>("todos");
@@ -47,12 +56,19 @@ export default function Gastos() {
     if (!usuario) return;
     setCargando(true);
     try {
-      const [datosGastos, datosCategorias] = await Promise.all([
+      const [datosGastos, datosCategorias, datosRecordatorios] = await Promise.all([
         gastosService.listarPorUsuario(usuario.id_usuario),
         tipoGastoService.listarPorUsuario(usuario.id_usuario),
+        recordatoriosService.obtenerPorUsuario(usuario.id_usuario),
       ]);
       setGastos(datosGastos.gastos);
       setCategorias(datosCategorias);
+
+      const mapa: Record<number, number> = {};
+      datosRecordatorios.forEach((r) => {
+        mapa[r.id_gasto] = r.tiempo_antelacion;
+      });
+      setRecordatorios(mapa);
     } catch (err) {
       mostrarToast(err instanceof Error ? err.message : "Error al cargar los gastos");
     } finally {
@@ -192,61 +208,75 @@ export default function Gastos() {
               <td colSpan={5}>No hay gastos para mostrar.</td>
             </tr>
           ) : (
-            paginados.map((g) => (
-              <tr key={g.id_gasto}>
-                <td>
-                  <span className="service-cell">
-                    <span
-                      className="color-dot"
-                      style={{ background: colorParaCategoria(g.categoria) }}
-                    />
-                    {g.categoria}
-                  </span>
-                </td>
-                <td>
-                  {new Date(g.fecha_vencimiento).toLocaleString("es-CO", {
-                    dateStyle: "medium",
-                    timeStyle: "short",
-                  })}
-                </td>
-                <td>{formatMoney(g.precio)}</td>
-                <td>
-                  <EstadoBadge estado={g.estado} fechaVencimiento={g.fecha_vencimiento} />
-                </td>
-                <td>
-                  {g.estado !== "pagado" && (
+            paginados.map((g) => {
+              const minutos = recordatorios[g.id_gasto];
+              return (
+                <tr key={g.id_gasto}>
+                  <td>
+                    <span className="service-cell">
+                      <span
+                        className="color-dot"
+                        style={{ background: colorParaCategoria(g.categoria) }}
+                      />
+                      {g.categoria}
+                    </span>
+                  </td>
+                  <td>
+                    {formatDateTime(g.fecha_vencimiento)}
+                    {minutos !== undefined && (
+                      <div
+                        style={{
+                          fontSize: "0.75rem",
+                          color: "var(--gray-400)",
+                          marginTop: 2,
+                        }}
+                      >
+                        🔔 Aviso: {formatDateTime(
+                          calcularFechaNotificacion(g.fecha_vencimiento, minutos).toISOString()
+                        )}{" "}
+                        ({minutosAHoras(minutos)} antes)
+                      </div>
+                    )}
+                  </td>
+                  <td>{formatMoney(g.precio)}</td>
+                  <td>
+                    <EstadoBadge estado={g.estado} fechaVencimiento={g.fecha_vencimiento} />
+                  </td>
+                  <td>
+                    {g.estado !== "pagado" && (
+                      <button
+                        className="action-btn"
+                        title="Marcar como pagado"
+                        onClick={() => marcarComoPagado(g)}
+                      >
+                        ✅
+                      </button>
+                    )}
                     <button
                       className="action-btn"
-                      title="Marcar como pagado"
-                      onClick={() => marcarComoPagado(g)}
+                      title="Editar"
+                      onClick={() => abrirEditar(g)}
                     >
-                      ✅
+                      ✏️
                     </button>
-                  )}
-                  <button
-                    className="action-btn"
-                    title="Editar"
-                    onClick={() => abrirEditar(g)}
-                  >
-                    ✏️
-                  </button>
-                  <button
-                    className="action-btn"
-                    title="Cancelar"
-                    onClick={() => cancelarGasto(g)}
-                  >
-                    🚫
-                  </button>
-                  <button
-                    className="action-btn del"
-                    title="Eliminar"
-                    onClick={() => eliminarGasto(g)}
-                  >
-                    🗑️
-                  </button>
-                </td>
-              </tr>
-            ))
+                    <button
+                      className="action-btn"
+                      title="Cancelar"
+                      onClick={() => cancelarGasto(g)}
+                    >
+                      🚫
+                    </button>
+                    <button
+                      className="action-btn del"
+                      title="Eliminar"
+                      onClick={() => eliminarGasto(g)}
+                    >
+                      🗑️
+                    </button>
+                  </td>
+                </tr>
+              );
+            })
           )}
         </tbody>
       </table>
