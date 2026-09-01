@@ -69,3 +69,59 @@ def eliminar_gasto(db: Session, id_gasto: int):
     db.execute(sql, {"id_gasto": id_gasto})
     db.commit()
     return True
+
+# =========================================================
+# 6. EDITAR UN GASTO EXISTENTE (campos opcionales)
+# =========================================================
+def actualizar_gasto(
+    db: Session,
+    id_gasto: int,
+    id_tipo: int = None,
+    fecha_vencimiento: datetime = None,
+    precio: float = None
+):
+    campos = []
+    parametros = {"id_gasto": id_gasto}
+
+    if id_tipo is not None:
+        campos.append("id_tipo = :id_tipo")
+        parametros["id_tipo"] = id_tipo
+
+    if fecha_vencimiento is not None:
+        campos.append("fecha_vencimiento = :fecha_vencimiento")
+        parametros["fecha_vencimiento"] = fecha_vencimiento
+
+    if precio is not None:
+        campos.append("precio = :precio")
+        parametros["precio"] = precio
+
+    if not campos:
+        return obtener_gasto_por_id(db, id_gasto)
+
+    sql = text(f"""
+        UPDATE gasto
+        SET {", ".join(campos)}
+        WHERE id_gasto = :id_gasto
+        RETURNING id_gasto, id_tipo, fecha_vencimiento, precio, estado;
+    """)
+    resultado = db.execute(sql, parametros)
+    db.commit()
+    fila = resultado.fetchone()
+    if fila:
+        return dict(fila._mapping)
+    return None
+
+# =========================================================
+# 7. OBTENER UN GASTO POR ID (usado internamente)
+# =========================================================
+def obtener_gasto_por_id(db: Session, id_gasto: int):
+    sql = text("""
+        SELECT id_gasto, id_tipo, fecha_vencimiento, precio, estado
+        FROM gasto
+        WHERE id_gasto = :id_gasto;
+    """)
+    resultado = db.execute(sql, {"id_gasto": id_gasto})
+    fila = resultado.fetchone()
+    if fila:
+        return dict(fila._mapping)
+    return None
