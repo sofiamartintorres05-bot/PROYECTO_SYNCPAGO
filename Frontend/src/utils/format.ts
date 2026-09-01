@@ -27,6 +27,23 @@ export function toDatetimeLocalValue(isoString: string): string {
   return isoString.slice(0, 16);
 }
 
+export function formatDateTime(isoString: string): string {
+  return new Date(isoString).toLocaleString("es-CO", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+}
+
+// Resta los minutos de antelación (tabla 'recordatorio') a la fecha de
+// vencimiento para saber la hora exacta en que se dispara el aviso.
+export function calcularFechaNotificacion(
+  fechaVencimientoISO: string,
+  minutosAntelacion: number
+): Date {
+  const fecha = new Date(fechaVencimientoISO);
+  return new Date(fecha.getTime() - minutosAntelacion * 60000);
+}
+
 const PALETA_COLORES = [
   "#3563e9", "#22c55e", "#ef4444", "#8b5cf6",
   "#f59e0b", "#06b6d4", "#eab308", "#ec4899",

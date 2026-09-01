@@ -11,4 +11,8 @@ export const recordatoriosService = {
       tiempo_antelacion: tiempoAntelacion,
     });
   },
+
+  obtenerPorUsuario(idUsuario: number) {
+    return api.get<Recordatorio[]>(`/recordatorios/usuario/${idUsuario}`);
+  },
 };
