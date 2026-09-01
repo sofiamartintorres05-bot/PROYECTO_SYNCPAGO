@@ -7,6 +7,7 @@ from app.controllers.gasto_controller import (
     obtener_detalles_todos_gastos,
     crear_gasto,
     actualizar_estado_gasto,
+    actualizar_gasto,
     eliminar_gasto
 )
 from app.controllers.usuario_controller import obtener_usuario
@@ -105,7 +106,42 @@ def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_d
             code=500
         )
 
-# 5. ELIMINAR GASTO (DELETE 6)
+# =========================================================
+# 5. EDITAR UN GASTO (campos opcionales: id_tipo, fecha, precio)
+# =========================================================
+@router.patch("/{id_gasto}")
+def editar_gasto(
+    id_gasto: int,
+    id_tipo: int = None,
+    fecha_vencimiento: str = None,  # 'YYYY-MM-DD HH:MM:SS'
+    precio: float = None,
+    db: Session = Depends(get_db)
+):
+    try:
+        fecha_dt = (
+            datetime.strptime(fecha_vencimiento, "%Y-%m-%d %H:%M:%S")
+            if fecha_vencimiento else None
+        )
+        actualizado = actualizar_gasto(db, id_gasto, id_tipo, fecha_dt, precio)
+        if not actualizado:
+            return response_error(
+                mensaje="Gasto no encontrado",
+                error="GASTO_NOT_FOUND",
+                code=404
+            )
+        return response_success(
+            mensaje="Gasto actualizado con éxito",
+            data=actualizado,
+            code=200
+        )
+    except Exception as error:
+        return response_error(
+            mensaje="Error al editar el gasto",
+            error=str(error),
+            code=500
+        )
+
+# 6. ELIMINAR GASTO (DELETE 6)
 @router.delete("/{id_gasto}")
 def borrar_gasto(id_gasto: int, db: Session = Depends(get_db)):
     try:
