@@ -3,9 +3,11 @@ import { useAuth } from "../hooks/useAuth";
 import { useToast } from "../hooks/useToast";
 import { gastosService } from "../services/gastosService";
 import { finanzasService } from "../services/finanzasService";
+import { tipoGastoService } from "../services/tipoGastoService";
 import type { Gasto } from "../interfaces/gasto";
 import type { PresupuestoMes } from "../interfaces/finanzas";
-import { formatMoney, colorParaCategoria, MESES } from "../utils/format";
+import type { TipoGasto, ClaseTipoGasto } from "../interfaces/tipoGasto";
+import { formatMoney, formatDateTime, colorParaCategoria, MESES } from "../utils/format";
 
 function fechaAMesInput(fecha: Date): string {
   const anio = fecha.getFullYear();
@@ -13,23 +15,48 @@ function fechaAMesInput(fecha: Date): string {
   return `${anio}-${mes}`;
 }
 
+function claveMes(anio: number, mesIndex: number): string {
+  return `${anio}-${String(mesIndex + 1).padStart(2, "0")}`;
+}
+
+// Busca, dentro de la lista de presupuestos, el registro EXACTO de un mes en
+// particular. Antes se usaba siempre el más reciente (presupuestos[0]) sin
+// importar qué mes se estuviera mirando, por eso agosto mostraba los datos
+// de septiembre. Cada mes ahora es completamente independiente.
+function buscarPresupuestoDeMes(
+  lista: PresupuestoMes[],
+  anio: number,
+  mesIndex: number
+): PresupuestoMes | undefined {
+  const clave = claveMes(anio, mesIndex);
+  return lista.find((p) => p.mes.slice(0, 7) === clave);
+}
+
+const CLASES_LABEL: Record<string, string> = {
+  vital: "Vital",
+  entretenimiento: "Entretenimiento",
+  varios: "Varios",
+  sin_clase: "Sin clase",
+};
+
 export default function Estadisticas() {
   const { usuario } = useAuth();
   const { mostrarToast } = useToast();
 
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [presupuestos, setPresupuestos] = useState<PresupuestoMes[]>([]);
+  const [categorias, setCategorias] = useState<TipoGasto[]>([]);
   const [cargando, setCargando] = useState(true);
 
-  // Mes al que se le va a guardar el presupuesto (por defecto, el mes actual).
-  // El backend ya soportaba una fecha específica; antes el frontend nunca la
-  // enviaba, así que solo se podía guardar el presupuesto del mes en curso.
   const [mesFormulario, setMesFormulario] = useState(fechaAMesInput(new Date()));
   const [entradaDinero, setEntradaDinero] = useState("");
   const [presupuestoGastos, setPresupuestoGastos] = useState("");
   const [guardando, setGuardando] = useState(false);
 
   const [fechaActual, setFechaActual] = useState(new Date());
+
+  const [modoDistribucion, setModoDistribucion] = useState<"categoria" | "clase">("categoria");
+  const [detalleAbierto, setDetalleAbierto] = useState<string | null>(null);
 
   useEffect(() => {
     if (!usuario) return;
@@ -40,12 +67,14 @@ export default function Estadisticas() {
     if (!usuario) return;
     setCargando(true);
     try {
-      const [datosGastos, datosPresupuesto] = await Promise.all([
+      const [datosGastos, datosPresupuesto, datosCategorias] = await Promise.all([
         gastosService.listarPorUsuario(usuario.id_usuario),
         finanzasService.obtenerPresupuesto(usuario.id_usuario),
+        tipoGastoService.listarPorUsuario(usuario.id_usuario),
       ]);
       setGastos(datosGastos.gastos);
       setPresupuestos(datosPresupuesto);
+      setCategorias(datosCategorias);
     } catch (err) {
       mostrarToast(err instanceof Error ? err.message : "Error al cargar estadísticas");
     } finally {
@@ -53,18 +82,18 @@ export default function Estadisticas() {
     }
   }
 
-  // Si ya existe un presupuesto guardado para el mes elegido en el
-  // formulario, se precargan sus valores para poder editarlo en vez de
-  // dejar los campos vacíos.
+  // Precarga el formulario con lo que ya existe guardado para el mes elegido
+  // (si no hay nada guardado para ese mes, queda vacío).
+  const presupuestoMesFormulario = presupuestos.find((p) => p.mes.slice(0, 7) === mesFormulario);
   useEffect(() => {
-    const existente = presupuestos.find((p) => p.mes.slice(0, 7) === mesFormulario);
-    if (existente) {
-      setEntradaDinero(String(existente.entrada_dinero));
-      setPresupuestoGastos(String(existente.presupuesto_gastos));
+    if (presupuestoMesFormulario) {
+      setEntradaDinero(String(presupuestoMesFormulario.entrada_dinero));
+      setPresupuestoGastos(String(presupuestoMesFormulario.presupuesto_gastos));
     } else {
       setEntradaDinero("");
       setPresupuestoGastos("");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mesFormulario, presupuestos]);
 
   async function guardarPresupuesto(e: React.FormEvent) {
@@ -92,23 +121,26 @@ export default function Estadisticas() {
     }
   }
 
-  // presupuestos viene ordenado DESC por fecha desde el backend
-  const mesActualPresupuesto = presupuestos[0];
-  const mesAnteriorPresupuesto = presupuestos[1];
-
-  const balanceDineroVsPresupuesto = mesActualPresupuesto
-    ? mesActualPresupuesto.entrada_dinero - mesActualPresupuesto.presupuesto_gastos
+  // Balance del formulario: SOLO del mes que se está editando en el formulario.
+  const balanceDineroVsPresupuestoFormulario = presupuestoMesFormulario
+    ? presupuestoMesFormulario.entrada_dinero - presupuestoMesFormulario.presupuesto_gastos
     : null;
-  const enDeuda = balanceDineroVsPresupuesto !== null && balanceDineroVsPresupuesto < 0;
+  const enDeudaFormulario =
+    balanceDineroVsPresupuestoFormulario !== null && balanceDineroVsPresupuestoFormulario < 0;
 
   function cambiarMes(direccion: number) {
     const nueva = new Date(fechaActual);
     nueva.setMonth(nueva.getMonth() + direccion);
     setFechaActual(nueva);
+    setDetalleAbierto(null);
   }
 
   const mes = fechaActual.getMonth();
   const anio = fechaActual.getFullYear();
+
+  // Presupuesto EXACTO del mes que se está viendo en "Resumen del mes"
+  // (antes se usaba siempre el más reciente, por eso se mezclaban los meses).
+  const presupuestoMesVisto = buscarPresupuestoDeMes(presupuestos, anio, mes);
 
   const gastosDelMes = gastos.filter((g) => {
     const f = new Date(g.fecha_vencimiento);
@@ -124,20 +156,36 @@ export default function Estadisticas() {
     .reduce((a, g) => a + g.precio, 0);
   const pendienteMes = Math.max(0, totalMes - pagadoMes - vencidoMes);
 
-  const presupuestoVigente = mesActualPresupuesto?.presupuesto_gastos ?? null;
+  // Saldo sobrante / deuda del MES SELECCIONADO = su propio presupuesto - lo pagado ESE mes.
+  const presupuestoVigente = presupuestoMesVisto?.presupuesto_gastos ?? null;
   const saldoSobranteODeuda =
     presupuestoVigente !== null ? presupuestoVigente - pagadoMes : null;
   const hayDeudaPorPagos = saldoSobranteODeuda !== null && saldoSobranteODeuda < 0;
 
   const totalPrevistoAPagar = pendienteMes + pagadoMes;
 
-  const categorias: Record<string, number> = {};
+  // Resuelve la clase (vital/entretenimiento/varios) de una categoría por su nombre.
+  function claseDeCategoria(nombreCategoria: string): string {
+    const encontrada = categorias.find((c) => c.detalle === nombreCategoria);
+    return encontrada?.clase ?? "sin_clase";
+  }
+
+  // Agrupación según el modo elegido: por categoría (detalle) o por clase.
+  const agrupado: Record<string, { total: number; gastos: Gasto[] }> = {};
   gastosDelMes.forEach((g) => {
-    categorias[g.categoria] = (categorias[g.categoria] || 0) + g.precio;
+    const clave = modoDistribucion === "categoria" ? g.categoria : claseDeCategoria(g.categoria);
+    if (!agrupado[clave]) agrupado[clave] = { total: 0, gastos: [] };
+    agrupado[clave].total += g.precio;
+    agrupado[clave].gastos.push(g);
   });
-  const categoriasOrdenadas = Object.entries(categorias).sort((a, b) => b[1] - a[1]);
+  const gruposOrdenados = Object.entries(agrupado).sort((a, b) => b[1].total - a[1].total);
+
+  function etiquetaGrupo(clave: string): string {
+    return modoDistribucion === "clase" ? CLASES_LABEL[clave] ?? clave : clave;
+  }
 
   // ============ RESUMEN DEL MES ANTERIOR ============
+  const mesAnteriorPresupuesto = presupuestos[1];
   let nombreMesAnterior = "";
   let pagadoMesAnterior = 0;
   let ahorroMesAnterior: number | null = null;
@@ -220,17 +268,20 @@ export default function Estadisticas() {
               </div>
             </div>
           </form>
-          {mesActualPresupuesto && (
+          {presupuestoMesFormulario ? (
             <p className="presupuesto-hint">
-              Presupuesto actual: {formatMoney(mesActualPresupuesto.presupuesto_gastos)} —{" "}
-              {enDeuda ? (
+              Presupuesto de {MESES[Number(mesFormulario.split("-")[1]) - 1]}:{" "}
+              {formatMoney(presupuestoMesFormulario.presupuesto_gastos)} —{" "}
+              {enDeudaFormulario ? (
                 <span style={{ color: "var(--red)", fontWeight: 700 }}>
-                  deuda: {formatMoney(Math.abs(balanceDineroVsPresupuesto ?? 0))}
+                  deuda: {formatMoney(Math.abs(balanceDineroVsPresupuestoFormulario ?? 0))}
                 </span>
               ) : (
-                <>disponible: {formatMoney(balanceDineroVsPresupuesto ?? 0)}</>
+                <>disponible: {formatMoney(balanceDineroVsPresupuestoFormulario ?? 0)}</>
               )}
             </p>
+          ) : (
+            <p className="presupuesto-hint">Aún no has guardado un presupuesto para este mes.</p>
           )}
         </article>
 
@@ -245,10 +296,8 @@ export default function Estadisticas() {
 
           {!mesAnteriorPresupuesto ? (
             <p style={{ color: "var(--gray-400)", fontSize: "0.85rem" }}>
-              Todavía no has guardado un presupuesto para ningún mes anterior — crear un
-              gasto con fecha pasada no cuenta como presupuesto. Usa el selector de "Mes"
-              de la tarjeta de la izquierda para elegir ese mes y guardar su presupuesto;
-              en cuanto lo hagas, aquí aparecerá la comparativa.
+              Todavía no has guardado un presupuesto para ningún mes anterior. Usa el selector de
+              "Mes" de la tarjeta de la izquierda para guardarlo.
             </p>
           ) : (
             <>
@@ -320,11 +369,12 @@ export default function Estadisticas() {
         </div>
         <div className="total-row">
           <span className="label">
-            {hayDeudaPorPagos ? "🔴 Deuda" : "💚 Saldo sobrante"} (presupuesto − pagado)
+            {hayDeudaPorPagos ? "🔴 Deuda" : "💚 Saldo sobrante"} (presupuesto de{" "}
+            {MESES[mes]} − pagado)
           </span>
           <span className={`value ${hayDeudaPorPagos ? "red" : "green"}`}>
             {presupuestoVigente === null
-              ? "Sin presupuesto"
+              ? "Sin presupuesto para este mes"
               : formatMoney(Math.abs(saldoSobranteODeuda ?? 0))}
           </span>
         </div>
@@ -334,31 +384,104 @@ export default function Estadisticas() {
         </div>
       </section>
 
-      <section className="chart-section" aria-label="Distribución por categoría">
-        <h2>📊 Distribución por categoría</h2>
+      <section className="chart-section" aria-label="Distribución">
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            marginBottom: 14,
+            flexWrap: "wrap",
+            gap: 10,
+          }}
+        >
+          <h2 style={{ margin: 0 }}>📊 Distribución de {MESES[mes]}</h2>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button
+              className={`filter-btn${modoDistribucion === "categoria" ? " active" : ""}`}
+              onClick={() => {
+                setModoDistribucion("categoria");
+                setDetalleAbierto(null);
+              }}
+            >
+              Por categoría
+            </button>
+            <button
+              className={`filter-btn${modoDistribucion === "clase" ? " active" : ""}`}
+              onClick={() => {
+                setModoDistribucion("clase");
+                setDetalleAbierto(null);
+              }}
+            >
+              Por clase
+            </button>
+          </div>
+        </div>
+
         {cargando ? (
           <p>Cargando...</p>
-        ) : categoriasOrdenadas.length === 0 ? (
+        ) : gruposOrdenados.length === 0 ? (
           <p style={{ color: "var(--gray-400)", fontSize: "0.85rem" }}>
             Sin datos para este mes.
           </p>
         ) : (
-          categoriasOrdenadas.map(([cat, monto]) => {
-            const pct = totalMes > 0 ? Math.round((monto / totalMes) * 100) : 0;
+          gruposOrdenados.map(([clave, info]) => {
+            const pct = totalMes > 0 ? Math.round((info.total / totalMes) * 100) : 0;
+            const abierto = detalleAbierto === clave;
             return (
-              <div className="bar-item" key={cat}>
+              <div className="bar-item" key={clave}>
                 <div className="bar-label">
-                  <span>{cat}</span>
+                  <span>{etiquetaGrupo(clave)}</span>
                   <span>
-                    {formatMoney(monto)} ({pct}%)
+                    {formatMoney(info.total)} ({pct}%)
                   </span>
                 </div>
                 <div className="bar-track">
                   <div
                     className="bar-fill"
-                    style={{ width: `${pct}%`, background: colorParaCategoria(cat) }}
+                    style={{ width: `${pct}%`, background: colorParaCategoria(clave) }}
                   />
                 </div>
+                <span
+                  className="forgot-link"
+                  style={{
+                    display: "inline-block",
+                    marginTop: 6,
+                    fontSize: "0.78rem",
+                    color: "var(--blue-mid)",
+                  }}
+                  onClick={() => setDetalleAbierto(abierto ? null : clave)}
+                >
+                  {abierto ? "Ocultar detalles ▲" : "Ver detalles ▼"}
+                </span>
+
+                {abierto && (
+                  <div
+                    style={{
+                      background: "var(--gray-50)",
+                      borderRadius: "var(--radius-sm)",
+                      padding: "8px 12px",
+                      marginTop: 6,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {info.gastos.map((g) => (
+                      <div
+                        key={g.id_gasto}
+                        className="total-row"
+                        style={{ padding: "8px 0" }}
+                      >
+                        <span className="label">
+                          {modoDistribucion === "clase" ? `${g.categoria} — ` : ""}
+                          {formatDateTime(g.fecha_vencimiento)} ({g.estado})
+                        </span>
+                        <span className="value" style={{ fontSize: "0.9rem" }}>
+                          {formatMoney(g.precio)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             );
           })
