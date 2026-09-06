@@ -80,6 +80,11 @@ export default function GastoFormModal({
     setError("");
 
     if (!usuario) return;
+
+    if (!clase) {
+      setError("Selecciona una categoría.");
+      return;
+    }
     if (!fecha) {
       setError("La fecha de vencimiento es obligatoria.");
       return;
@@ -105,7 +110,7 @@ export default function GastoFormModal({
         const categoria = await tipoGastoService.crear(
           usuario.id_usuario,
           detalleNuevo.trim(),
-          clase || undefined
+          clase
         );
         idTipoFinal = categoria.id_tipo;
         onCategoriaCreada(categoria);
