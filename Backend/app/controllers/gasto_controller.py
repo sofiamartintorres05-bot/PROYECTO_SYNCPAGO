@@ -125,3 +125,15 @@ def obtener_gasto_por_id(db: Session, id_gasto: int):
     if fila:
         return dict(fila._mapping)
     return None
+
+# =========================================================
+# 8. MARCAR AUTOMÁTICAMENTE LOS GASTOS PENDIENTES VENCIDOS
+# =========================================================
+# Llama a la función almacenada fn_actualizar_gastos_vencidos()
+# (ver BaseDatos/07_FUNCION_VENCIDOS.sql). No escribe SQL de UPDATE
+# aquí directamente: delega toda la lógica en la función de PostgreSQL,
+# que a su vez dispara el trigger de trazabilidad ya existente.
+def marcar_gastos_vencidos(db: Session):
+    db.execute(text("SELECT fn_actualizar_gastos_vencidos();"))
+    db.commit()
+    return True

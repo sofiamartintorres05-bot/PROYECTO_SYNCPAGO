@@ -8,7 +8,8 @@ from app.controllers.gasto_controller import (
     crear_gasto,
     actualizar_estado_gasto,
     actualizar_gasto,
-    eliminar_gasto
+    eliminar_gasto,
+    marcar_gastos_vencidos
 )
 from app.controllers.usuario_controller import obtener_usuario
 from app.utils.response import response_success, response_error
@@ -154,6 +155,25 @@ def borrar_gasto(id_gasto: int, db: Session = Depends(get_db)):
     except Exception as error:
         return response_error(
             mensaje="Error al eliminar el gasto",
+            error=str(error),
+            code=500
+        )
+
+# =========================================================
+# 7. MARCAR MANUALMENTE LOS GASTOS VENCIDOS (para probar/demostrar en vivo)
+# =========================================================
+@router.post("/actualizar-vencidos")
+def actualizar_vencidos_manual(db: Session = Depends(get_db)):
+    try:
+        marcar_gastos_vencidos(db)
+        return response_success(
+            mensaje="Gastos vencidos actualizados con éxito",
+            data=None,
+            code=200
+        )
+    except Exception as error:
+        return response_error(
+            mensaje="Error al actualizar los gastos vencidos",
             error=str(error),
             code=500
         )
