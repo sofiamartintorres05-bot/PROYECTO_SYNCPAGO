@@ -151,9 +151,9 @@ export default function Estadisticas() {
   const pagadoMes = gastosDelMes
     .filter((g) => g.estado === "pagado")
     .reduce((a, g) => a + g.precio, 0);
-  const vencidoMes = gastosDelMes
-    .filter((g) => g.estado === "pendiente" && new Date(g.fecha_vencimiento) < new Date())
-    .reduce((a, g) => a + g.precio, 0);
+  const vencidoMes = gastosDelMes.filter(
+    (g) => g.estado === "vencido" || (g.estado === "pendiente" && new Date(g.fecha_vencimiento) < new Date())
+  ).reduce((a, g) => a + g.precio, 0);
   const pendienteMes = Math.max(0, totalMes - pagadoMes - vencidoMes);
 
   // Saldo sobrante / deuda del MES SELECCIONADO = su propio presupuesto - lo pagado ESE mes.
