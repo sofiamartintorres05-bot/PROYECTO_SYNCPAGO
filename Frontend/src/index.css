@@ -436,6 +436,7 @@ input, select, textarea {
   flex-wrap: wrap;
 }
 
+
 .filter-btn {
   padding: 7px 14px;
   border: 1.5px solid var(--gray-200);
@@ -444,9 +445,16 @@ input, select, textarea {
   font-size: 0.85rem;
   font-weight: 600;
   color: var(--gray-700);
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, opacity 0.15s, background 0.15s, color 0.15s;
+  opacity: 0.55;
 }
-.filter-btn:hover { border-color: var(--blue-mid); }
+.filter-btn:hover { border-color: var(--blue-mid); opacity: 0.9; }
+.filter-btn.active {
+  background: var(--blue-mid);
+  border-color: var(--blue-mid);
+  color: var(--white);
+  opacity: 1;
+}
 
 .search-input-wrap {
   display: flex;

@@ -5,7 +5,7 @@ import { useToast } from "../hooks/useToast";
 import { gastosService } from "../services/gastosService";
 import { tipoGastoService } from "../services/tipoGastoService";
 import { recordatoriosService } from "../services/recordatoriosService";
-import type { Gasto } from "../interfaces/gasto";
+import type { Gasto, EstadoGasto } from "../interfaces/gasto";
 import type { TipoGasto } from "../interfaces/tipoGasto";
 import {
   formatMoney,
@@ -20,6 +20,8 @@ import Pagination from "../components/Pagination";
 
 const PAGE_SIZE = 8;
 
+type FiltroEstado = "todos" | EstadoGasto;
+
 export default function Gastos() {
   const { usuario } = useAuth();
   const { mostrarToast } = useToast();
@@ -31,7 +33,7 @@ export default function Gastos() {
   const [recordatorios, setRecordatorios] = useState<Record<number, number>>({});
   const [cargando, setCargando] = useState(true);
   const [busqueda, setBusqueda] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState<string>("todos");
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>("todos");
   const [pagina, setPagina] = useState(1);
 
   const [modalAbierto, setModalAbierto] = useState(false);
@@ -167,6 +169,12 @@ export default function Gastos() {
           onClick={() => setFiltroEstado("pendiente")}
         >
           Pendientes
+        </button>
+        <button
+          className={`filter-btn${filtroEstado === "vencido" ? " active" : ""}`}
+          onClick={() => setFiltroEstado("vencido")}
+        >
+          Vencidos
         </button>
         <button
           className={`filter-btn${filtroEstado === "pagado" ? " active" : ""}`}
