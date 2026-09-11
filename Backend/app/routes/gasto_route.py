@@ -1,11 +1,16 @@
+# ==============================================================================
+# ARCHIVO COMPLETO DE RUTAS: app/routes/gastos.py
+# ==============================================================================
 from datetime import datetime
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+
 from app.config.database import get_db
+# 1. Importación de las 6 funciones del controlador de gastos
 from app.controllers.gasto_controller import (
     obtener_gastos_usuario,
     obtener_detalles_todos_gastos,
-    obtener_gastos_usuario_por_clase,  # <-- NUEVA IMPORTACIÓN: Función de filtro por clase
+    obtener_gastos_usuario_por_clase,  # <-- NUEVA FUNCIÓN DE FILTRO
     crear_gasto,
     actualizar_estado_gasto,
     eliminar_gasto
@@ -18,7 +23,10 @@ router = APIRouter(
     tags=["Gastos"]
 )
 
-### 1. LISTAR GASTOS DE UN USUARIO (SELECT 3)
+
+# ------------------------------------------------------------------------------
+# 1. LISTAR GASTOS DE UN USUARIO (SELECT 3)
+# ------------------------------------------------------------------------------
 @router.get("/usuario/{id_usuario}")
 def listar_gastos_usuario(id_usuario: int, db: Session = Depends(get_db)):
     try:
@@ -43,7 +51,9 @@ def listar_gastos_usuario(id_usuario: int, db: Session = Depends(get_db)):
         )
 
 
-### 2. OBTENER DETALLE DE TODOS LOS GASTOS GLOBALES (SELECT 2)
+# ------------------------------------------------------------------------------
+# 2. OBTENER DETALLE DE TODOS LOS GASTOS GLOBALES (SELECT 2)
+# ------------------------------------------------------------------------------
 @router.get("/detalles")
 def listar_detalles_todos_gastos(db: Session = Depends(get_db)):
     try:
@@ -61,14 +71,17 @@ def listar_detalles_todos_gastos(db: Session = Depends(get_db)):
         )
 
 
-# ==============================================================================
-# NUEVO ENDPOINT: FILTRAR GASTOS POR CLASE DE UN USUARIO (SELECT CON ILIKE)
-# ==============================================================================
+# ------------------------------------------------------------------------------
+# 3. FILTRAR Y RESUMIR GASTOS POR CLASE (NUEVO ENDPOINT)
+# ------------------------------------------------------------------------------
 @router.get("/usuario/{id_usuario}/clase/{clase}")
 def filtrar_gastos_por_clase(id_usuario: int, clase: str, db: Session = Depends(get_db)):
-
+    """
+    ENDPOINT: Consulta el total de recibos, monto acumulado y listado de gastos
+    filtrados por clase (ejemplo: 'servicios', 'arriendo') para un usuario.
+    """
     try:
-        # 1. Validar que el usuario exista en la base de datos
+        # Validación de la existencia del usuario
         usuario = obtener_usuario(db, id_usuario)
         if not usuario:
             return response_error(
@@ -77,17 +90,21 @@ def filtrar_gastos_por_clase(id_usuario: int, clase: str, db: Session = Depends(
                 code=404
             )
         
-        # 2. Invocación a la función del controlador que ejecuta la consulta con INNER JOIN e ILIKE
-        gastos_filtrados = obtener_gastos_usuario_por_clase(db, id_usuario, clase)
+        # Ejecución del controlador con métricas agregadas
+        resumen = obtener_gastos_usuario_por_clase(db, id_usuario, clase)
         
-        # 3. Retorno exitoso utilizando el helper response_success() del proyecto
         return response_success(
-            mensaje=f"Gastos filtrados exitosamente por la clase '{clase}'",
-            data={"usuario": usuario, "clase_buscada": clase, "gastos": gastos_filtrados},
+            mensaje=f"Resumen y gastos de la clase '{clase}' obtenidos exitosamente",
+            data={
+                "usuario": usuario,
+                "clase": resumen["clase"],
+                "total_recibos": resumen["total_recibos"],
+                "monto_acumulado": resumen["monto_acumulado"],
+                "gastos": resumen["gastos"]
+            },
             code=200
         )
     except Exception as error:
-        # 4. Captura centralizada de errores con response_error()
         return response_error(
             mensaje=f"Error al filtrar los gastos por la clase '{clase}'",
             error=str(error),
@@ -95,7 +112,9 @@ def filtrar_gastos_por_clase(id_usuario: int, clase: str, db: Session = Depends(
         )
 
 
-### 3. CREAR NUEVO GASTO (INSERT 4)
+# ------------------------------------------------------------------------------
+# 4. CREAR NUEVO GASTO (INSERT 4)
+# ------------------------------------------------------------------------------
 @router.post("/")
 def registrar_gasto(
     id_tipo: int,
@@ -120,7 +139,9 @@ def registrar_gasto(
         )
 
 
-### 4. ACTUALIZAR ESTADO DE GASTO (UPDATE 5)
+# ------------------------------------------------------------------------------
+# 5. ACTUALIZAR ESTADO DE GASTO (UPDATE 5)
+# ------------------------------------------------------------------------------
 @router.patch("/{id_gasto}/estado")
 def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_db)):
     try:
@@ -144,7 +165,9 @@ def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_d
         )
 
 
-### 5. ELIMINAR GASTO (DELETE 6)
+# ------------------------------------------------------------------------------
+# 6. ELIMINAR GASTO (DELETE 6)
+# ------------------------------------------------------------------------------
 @router.delete("/{id_gasto}")
 def borrar_gasto(id_gasto: int, db: Session = Depends(get_db)):
     try:
