@@ -5,6 +5,7 @@ from app.config.database import get_db
 from app.controllers.gasto_controller import (
     obtener_gastos_usuario,
     obtener_detalles_todos_gastos,
+    obtener_gastos_usuario_por_clase,  # <-- NUEVA IMPORTACIÓN: Función de filtro por clase
     crear_gasto,
     actualizar_estado_gasto,
     eliminar_gasto
@@ -17,7 +18,7 @@ router = APIRouter(
     tags=["Gastos"]
 )
 
-# 1. LISTAR GASTOS DE UN USUARIO (SELECT 3)
+### 1. LISTAR GASTOS DE UN USUARIO (SELECT 3)
 @router.get("/usuario/{id_usuario}")
 def listar_gastos_usuario(id_usuario: int, db: Session = Depends(get_db)):
     try:
@@ -41,7 +42,8 @@ def listar_gastos_usuario(id_usuario: int, db: Session = Depends(get_db)):
             code=500
         )
 
-# 2. OBTENER DETALLE DE TODOS LOS GASTOS GLOBALES (SELECT 2)
+
+### 2. OBTENER DETALLE DE TODOS LOS GASTOS GLOBALES (SELECT 2)
 @router.get("/detalles")
 def listar_detalles_todos_gastos(db: Session = Depends(get_db)):
     try:
@@ -58,13 +60,48 @@ def listar_detalles_todos_gastos(db: Session = Depends(get_db)):
             code=500
         )
 
-# 3. CREAR NUEVO GASTO (INSERT 4)
+
+# ==============================================================================
+# NUEVO ENDPOINT: FILTRAR GASTOS POR CLASE DE UN USUARIO (SELECT CON ILIKE)
+# ==============================================================================
+@router.get("/usuario/{id_usuario}/clase/{clase}")
+def filtrar_gastos_por_clase(id_usuario: int, clase: str, db: Session = Depends(get_db)):
+
+    try:
+        # 1. Validar que el usuario exista en la base de datos
+        usuario = obtener_usuario(db, id_usuario)
+        if not usuario:
+            return response_error(
+                mensaje="El usuario no existe",
+                error="USUARIO_NOT_FOUND",
+                code=404
+            )
+        
+        # 2. Invocación a la función del controlador que ejecuta la consulta con INNER JOIN e ILIKE
+        gastos_filtrados = obtener_gastos_usuario_por_clase(db, id_usuario, clase)
+        
+        # 3. Retorno exitoso utilizando el helper response_success() del proyecto
+        return response_success(
+            mensaje=f"Gastos filtrados exitosamente por la clase '{clase}'",
+            data={"usuario": usuario, "clase_buscada": clase, "gastos": gastos_filtrados},
+            code=200
+        )
+    except Exception as error:
+        # 4. Captura centralizada de errores con response_error()
+        return response_error(
+            mensaje=f"Error al filtrar los gastos por la clase '{clase}'",
+            error=str(error),
+            code=500
+        )
+
+
+### 3. CREAR NUEVO GASTO (INSERT 4)
 @router.post("/")
 def registrar_gasto(
-    id_tipo: int, 
+    id_tipo: int,
     fecha_vencimiento: str, # Ejemplo: '2026-09-01 18:00:00'
-    precio: float, 
-    estado: str = "pendiente", 
+    precio: float,
+    estado: str = "pendiente",
     db: Session = Depends(get_db)
 ):
     try:
@@ -82,7 +119,8 @@ def registrar_gasto(
             code=500
         )
 
-# 4. ACTUALIZAR ESTADO DE GASTO (UPDATE 5)
+
+### 4. ACTUALIZAR ESTADO DE GASTO (UPDATE 5)
 @router.patch("/{id_gasto}/estado")
 def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_db)):
     try:
@@ -92,7 +130,7 @@ def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_d
                 mensaje="Gasto no encontrado",
                 error="GASTO_NOT_FOUND",
                 code=404
-              )
+            )
         return response_success(
             mensaje="Estado del gasto actualizado con éxito",
             data=actualizado,
@@ -105,7 +143,8 @@ def cambiar_estado_gasto(id_gasto: int, estado: str, db: Session = Depends(get_d
             code=500
         )
 
-# 5. ELIMINAR GASTO (DELETE 6)
+
+### 5. ELIMINAR GASTO (DELETE 6)
 @router.delete("/{id_gasto}")
 def borrar_gasto(id_gasto: int, db: Session = Depends(get_db)):
     try:
