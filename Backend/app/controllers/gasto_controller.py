@@ -137,3 +137,40 @@ def marcar_gastos_vencidos(db: Session):
     db.execute(text("SELECT fn_actualizar_gastos_vencidos();"))
     db.commit()
     return True
+
+# ------------------------------------------------------------------------------
+# 9. OBTENER GASTOS POR CLASE CON RESUMEN Y MÉTRICAS (NUEVO FILTRO)
+# ------------------------------------------------------------------------------
+def obtener_gastos_usuario_por_clase(db: Session, id_usuario: int, clase: str):
+
+    sql = text("""
+        SELECT
+            g.id_gasto,
+            tg.clase,
+            tg.detalle AS categoria,
+            g.precio,
+            g.estado,
+            TO_CHAR(g.fecha_vencimiento, 'YYYY-MM-DD HH24:MI:SS') AS fecha_vencimiento
+        FROM gasto g
+        INNER JOIN tipo_gasto tg ON g.id_tipo = tg.id_tipo
+        WHERE tg.id_usuario = :id_usuario
+          AND tg.clase ILIKE :clase
+        ORDER BY g.fecha_vencimiento ASC;
+    """)
+    resultado = db.execute(sql, {
+        "id_usuario": id_usuario,
+        "clase": f"%{clase}%"
+    })
+   
+    gastos = [dict(row._mapping) for row in resultado]
+   
+    # Cálculo de métricas agregadas para las tarjetas del Frontend
+    total_recibos = len(gastos)
+    monto_acumulado = sum(float(g["precio"]) for g in gastos if g["estado"] != "cancelado")
+   
+    return {
+        "clase": clase,
+        "total_recibos": total_recibos,
+        "monto_acumulado": round(monto_acumulado, 2),
+        "gastos": gastos
+    }
